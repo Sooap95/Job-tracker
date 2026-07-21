@@ -1,0 +1,4 @@
+# Vraies données personnelles — ne jamais committer dans un repo public/privé partagé
+backup_jobs*.json
+data/*.json
+*.local.json
