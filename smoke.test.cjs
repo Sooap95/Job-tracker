@@ -81,3 +81,60 @@ test('legacy GitHub token is migrated from persistent to session storage', () =>
   assert.equal(app.session.get('jobtracker_gh_session_token'),'example-token');
   assert.equal(JSON.parse(app.memory.get('jobtracker_gh_config')).token,undefined);
 });
+
+test('imported submitted records open for editing and retain legacy occupation values', () => {
+  const app = createApp([
+    {id:'submitted',role:'Submitted position',co:'Example',status:'Soumis',taux:'80-100%',orp:'Oui',date:'2026-10-10',fit_score:87}
+  ]);
+  assert.doesNotThrow(() => app.run("openModal('submitted')"));
+  assert.equal(app.elements.get('f-role').value,'Submitted position');
+  assert.equal(app.elements.get('f-status').value,'Soumis');
+  assert.doesNotThrow(() => app.run('save()'));
+  assert.equal(app.run('jobs[0].taux'),'80-100%');
+  assert.equal(app.run('jobs[0].status'),'Soumis');
+  assert.equal(app.run('jobs[0].orp'),'Oui');
+  assert.equal(app.run('jobs[0].fit_score'),87);
+});
+
+test('historical submitted variants are searchable and appear on the board', () => {
+  const app = createApp([
+    {id:'a',role:'Submitted A',co:'Example',status:'Soumis',taux:'80-100%'},
+    {id:'b',role:'Submitted B',co:'Example',status:'Soumise',taux:'80-100%'},
+    {id:'c',role:'Submitted C',co:'Example',status:'Soumis (RAV quota octobre)',taux:'A plein temps'}
+  ]);
+  app.elements.get('fStatus').value='Soumis';
+  app.run('render()');
+  const filtered=app.elements.get('tbody').innerHTML;
+  assert.match(filtered,/Submitted A/);
+  assert.match(filtered,/Submitted B/);
+  assert.match(filtered,/Submitted C/);
+  app.run('renderBoard(jobs)');
+  const board=app.elements.get('kanban-view').innerHTML;
+  assert.match(board,/Submitted A/);
+  assert.match(board,/Submitted B/);
+  assert.match(board,/Submitted C/);
+  assert.equal(app.run('isSubmittedStatus("Soumise")'),true);
+});
+
+test('form exposes legacy submitted statuses and 80-100 percent occupation', () => {
+  const html = fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+  assert.match(html,/value="Soumise"/);
+  assert.match(html,/value="Soumis \(RAV quota octobre\)"/);
+  assert.match(html,/name="taux"[^>]+value="80-100%"/);
+});
+
+test('desktop list uses a fitted table with responsive secondary columns', () => {
+  const html = fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+  const css = fs.readFileSync(path.join(__dirname,'style.css'),'utf8');
+  assert.match(html,/<table class="jobs-table">/);
+  assert.doesNotMatch(html,/<th style="width:/);
+  assert.match(css,/\.jobs-table \{ width:100%; min-width:0; table-layout:fixed; \}/);
+  assert.match(css,/@media \(max-width:1700px\)/);
+  assert.match(css,/@media \(max-width:1200px\)/);
+  assert.match(css,/@media \(max-width:980px\)/);
+  const app = createApp([{id:'one',role:'Senior Scientist',co:'Example',status:'Soumis (RAV quota octobre)',notes:'Interview notes'}]);
+  const row = app.elements.get('tbody').innerHTML;
+  assert.match(row,/title="Soumis \(RAV quota octobre\)"/);
+  assert.match(row,/row-actions/);
+  assert.match(row,/Consulter ou modifier/);
+});

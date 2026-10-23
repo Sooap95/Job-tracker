@@ -15,6 +15,8 @@ const PRIO_CLASS = {
   'Backup':'b-backup','Offre intéressante':'b-interessant','Job de rêve':'b-reve'
 };
 const PRIO_ORDER = {'Job de rêve':0,'Offre intéressante':1,'Backup':2,'':3};
+const isSubmittedStatus = status => /^Soumis(?:e)?(?:\s|\(|$)/i.test(status || '');
+const statusClass = status => STATUS_CLASS[status] || (isSubmittedStatus(status) ? 'b-cours' : '');
 
 // ===== SECURITY HELPERS =====
 function esc(s) {
@@ -35,6 +37,12 @@ function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) jobs = JSON.parse(raw);
+    if (!Array.isArray(jobs)) jobs = [];
+    // Compatibilité avec les très anciennes sauvegardes sans identifiant.
+    if (jobs.some(j => !j.id)) {
+      jobs=jobs.map(j => ({...j,id:j.id || genId()}));
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(jobs));
+    }
   } catch(e) { jobs = []; }
   render(); renderRAV(); renderStats();
 }
@@ -103,7 +111,7 @@ function render() {
     (j.co||'').toLowerCase().includes(search) ||
     (j.notes||'').toLowerCase().includes(search)
   );
-  if (fs) data = data.filter(j => j.status === fs);
+  if (fs) data = data.filter(j => fs === 'Soumis' ? isSubmittedStatus(j.status) : j.status === fs);
   if (fp) data = data.filter(j => j.priorite === fp);
 
   if (so === 'date_desc') data.sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -129,15 +137,15 @@ function render() {
       <td class="td-role" title="${esc(j.role)}">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border2);" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='inherit'">${esc(j.role)||'—'}</a>` : (esc(j.role)||'—')}</td>
       <td class="td-co" title="${esc(j.co)}">${esc(j.co)||'—'}</td>
       <td style="white-space:nowrap;color:var(--text2)">${fmtDate(j.date)}</td>
-      <td><span class="badge ${STATUS_CLASS[j.status]||''}">${esc(j.status)||'—'}</span></td>
+      <td title="${esc(j.status)}"><span class="badge ${statusClass(j.status)}">${esc(j.status)||'—'}</span></td>
       <td>${j.priorite ? `<span class="badge ${PRIO_CLASS[j.priorite]||''}">${esc(j.priorite)}</span>` : '—'}</td>
       <td style="color:var(--text2);white-space:nowrap">${esc(j.salaire)||'—'}</td>
       <td><span class="badge ${rc ? 'b-rav-ok' : 'b-rav-no'}">${rc ? '✓ OK' : '⚠ Incomplet'}</span></td>
       <td>${j.resultat ? `<span style="font-size:12px;color:var(--text2)">${esc(j.resultat)}</span>` : '—'}</td>
       <td class="td-notes" title="${esc(j.notes)}">${esc(j.notes)||'—'}</td>
       <td>
-        <div style="display:flex;gap:5px">
-          <button class="btn btn-sm btn-icon" onclick="openModal(${jsArg(j.id)})" title="Modifier">✏</button>
+        <div class="row-actions">
+          <button class="btn btn-sm btn-icon" onclick="openModal(${jsArg(j.id)})" title="Consulter ou modifier" aria-label="Consulter ou modifier ${esc(j.role)}">✏</button>
           <button class="btn btn-sm btn-icon btn-danger" onclick="delJob(${jsArg(j.id)})" title="Supprimer">✕</button>
         </div>
       </td>
@@ -155,13 +163,14 @@ function renderStats() {
   const total = jobs.length;
   const counts = {'A postuler':0,'En cours':0,'Attente de retour':0,'Refusé':0,'Accepté':0};
   jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
+  const submittedCount = jobs.filter(j => isSubmittedStatus(j.status)).length;
   const thisMonth = localDateKey().slice(0,7);
   const thisMonthJobs = jobs.filter(j => j.status !== 'A postuler' && j.date?.slice(0,7) === thisMonth);
   const followups = jobs.filter(j => j.followup && j.followup <= localDateKey() && !['Refusé','Accepté'].includes(j.status)).length;
 
   document.getElementById('stats-row').innerHTML = `
     <div class="stat-card"><div class="stat-n">${total}</div><div class="stat-l">Candidatures suivies</div></div>
-    <div class="stat-card blue"><div class="stat-n">${counts['En cours'] + counts['Attente de retour']}</div><div class="stat-l">Dossiers actifs</div></div>
+    <div class="stat-card blue"><div class="stat-n">${counts['En cours'] + counts['Attente de retour'] + submittedCount}</div><div class="stat-l">Dossiers actifs</div></div>
     <div class="stat-card amber"><div class="stat-n">${followups}</div><div class="stat-l">Relances à traiter</div></div>
     <div class="stat-card green"><div class="stat-n">${thisMonthJobs.length}</div><div class="stat-l">Démarches ce mois</div></div>
   `;
@@ -203,7 +212,7 @@ function renderMobileCards(data) {
     <article class="mobile-card">
       <div class="action-company" aria-hidden="true">${esc((j.co||'?').slice(0,1).toUpperCase())}</div>
       <div class="mobile-card-copy"><strong>${esc(j.role)}</strong><span class="co">${esc(j.co)}${j.date?' · '+esc(niceDate(j.date)):''}</span>
-        <div class="badges"><span class="badge ${STATUS_CLASS[j.status]||''}">${esc(j.status||'Non défini')}</span>
+        <div class="badges"><span class="badge ${statusClass(j.status)}">${esc(j.status||'Non défini')}</span>
         ${j.priorite?'<span class="badge '+(PRIO_CLASS[j.priorite]||'')+'">'+esc(j.priorite)+'</span>':''}
         ${j.followup?'<span class="badge b-rav-ok">Action '+esc(niceDate(j.followup))+'</span>':''}</div>
       </div>
@@ -212,11 +221,11 @@ function renderMobileCards(data) {
 }
 function renderBoard(data) {
   const groups = [
-    ['A postuler','À postuler'],['En cours','En cours'],
+    ['A postuler','À postuler'],['En cours','En cours'],['Soumis','Soumis'],
     ['Attente de retour','En attente'],['Accepté','Accepté'],['Refusé','Refusé']
   ];
   document.getElementById('kanban-view').innerHTML = groups.map(([status,label]) => {
-    const col = data.filter(j => j.status === status);
+    const col = data.filter(j => status === 'Soumis' ? isSubmittedStatus(j.status) : j.status === status);
     return `<section class="kanban-column"><div class="kanban-title">${esc(label)} <span class="kanban-count">${col.length}</span></div>
       ${col.length ? col.map(j => `<div class="kanban-card" role="button" tabindex="0" onclick="openModal(${jsArg(j.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModal(${jsArg(j.id)})}">
         <strong>${esc(j.role)}</strong><small>${esc(j.co)}</small>
@@ -332,6 +341,12 @@ function exportRAVCSV() {
 }
 
 // ===== MODAL =====
+function selectRadioValue(name,value) {
+  // Une valeur historique inconnue ne doit ni bloquer la modale ni être remplacée.
+  document.querySelectorAll(`input[name="${name}"]`).forEach(input => {
+    input.checked = input.value === value;
+  });
+}
 function openModal(id = null) {
   editId = id;
   document.getElementById('modal-title').textContent = id ? 'Modifier la candidature' : 'Nouvelle candidature';
@@ -362,8 +377,8 @@ function openModal(id = null) {
   document.getElementById('f-m-contact').checked = !!j.m_contact;
   document.getElementById('f-m-tel').checked = !!j.m_tel;
   document.getElementById('f-form-link').value = j.form_link || '';
-  document.querySelector(`input[name=orp][value="${j.orp || 'Non'}"]`).checked = true;
-  document.querySelector(`input[name=taux][value="${j.taux || 'A plein temps'}"]`).checked = true;
+  selectRadioValue('orp',j.orp || 'Non');
+  selectRadioValue('taux',j.taux || 'A plein temps');
   document.getElementById('f-resultat').value = j.resultat || '';
 
   document.getElementById('f-notes').value = j.notes || '';
@@ -388,10 +403,13 @@ function save() {
   const co = document.getElementById('f-co').value.trim();
   const date = document.getElementById('f-date').value;
   if (!role) { alert('Le nom du poste est requis.'); return; }
-  const status = document.getElementById('f-status').value;
+  const original = editId ? jobs.find(j => j.id === editId) : null;
+  const status = document.getElementById('f-status').value || original?.status || 'A postuler';
   if (status === 'A postuler' && date && !confirm('Une date d\'envoi est renseignée, mais le statut est « À postuler ». Conserver cette combinaison ? La candidature sera exclue du rapport RAV.')) return;
 
   const j = {
+    // Préserver les champs importés non représentés dans le formulaire (ex. fit_score).
+    ...(original || {}),
     id: editId || genId(),
     role, co, date,
     status,
@@ -414,8 +432,8 @@ function save() {
     m_contact: document.getElementById('f-m-contact').checked,
     m_tel: document.getElementById('f-m-tel').checked,
     form_link: document.getElementById('f-form-link').value.trim(),
-    orp: document.querySelector('input[name=orp]:checked')?.value || 'Non',
-    taux: document.querySelector('input[name=taux]:checked')?.value || 'A plein temps',
+    orp: document.querySelector('input[name=orp]:checked')?.value || original?.orp || 'Non',
+    taux: document.querySelector('input[name=taux]:checked')?.value || original?.taux || 'A plein temps',
     resultat: document.getElementById('f-resultat').value,
     notes: document.getElementById('f-notes').value.trim(),
     docs: document.getElementById('f-docs').value.trim(),
@@ -429,6 +447,7 @@ function save() {
     jobs.unshift(j);
   }
 
+  queueSecureOperation({type:'upsert',id:j.id,job:j});
   persist();
   closeModal();
   render();
@@ -438,6 +457,7 @@ function save() {
 function delJob(id) {
   if (!confirm('Supprimer cette candidature ? Cette action est irréversible.')) return;
   jobs = jobs.filter(j => j.id !== id);
+  queueSecureOperation({type:'delete',id,at:new Date().toISOString()});
   persist();
   render();
   renderRAV();
@@ -460,8 +480,15 @@ function importJSON(event) {
     try {
       const data = JSON.parse(e.target.result);
       if (!Array.isArray(data)) throw new Error('Format invalide');
+      if (data.some(j => !j || typeof j !== 'object' || typeof j.role !== 'string')) throw new Error('Certaines candidatures sont invalides.');
+      const ids = data.map(j => j.id).filter(Boolean);
+      if (new Set(ids).size !== ids.length) throw new Error('Des identifiants de candidature sont en double.');
       if (!confirm(`Importer ${data.length} candidature(s) ? Les données actuelles seront remplacées.`)) return;
-      jobs = data;
+      if (secureReady && !confirm('Attention : sur cette version synchronisée, les données importées remplaceront aussi les versions plus anciennes dans le dépôt privé. Avez-vous conservé une sauvegarde ?')) return;
+      const importedIds = new Set(data.map(j => j.id));
+      jobs.filter(j => !importedIds.has(j.id)).forEach(j => queueSecureOperation({type:'delete',id:j.id,at:new Date().toISOString()}));
+      jobs = data.map(j => ({...j,id:j.id || genId(),updatedAt:new Date().toISOString()}));
+      jobs.forEach(j => queueSecureOperation({type:'upsert',id:j.id,job:j}));
       persist();
       render();
       renderRAV();
@@ -526,6 +553,13 @@ function mergeJSON(event) {
         return;
       }
 
+      const oldById = new Map(JSON.parse(before).map(j => [j.id,j]));
+      for (const j of jobs) {
+        if (JSON.stringify(j) !== JSON.stringify(oldById.get(j.id))) {
+          j.updatedAt = new Date().toISOString();
+          queueSecureOperation({type:'upsert',id:j.id,job:j});
+        }
+      }
       persist();
       render();
       renderRAV();
@@ -689,8 +723,145 @@ async function ghPull() {
   }
 }
 
+// ===== SYNCHRONISATION PRIVÉE AUTOMATIQUE (hébergement Worker uniquement) =====
+// La file d'opérations est persistée localement, même sans réseau. Le serveur
+// arbitre les modifications concurrentes et conserve les suppressions.
+const PRIVATE_QUEUE_KEY = 'jobtracker_secure_operations_v2';
+const PRIVATE_INIT_KEY = 'jobtracker_secure_initialized_v2';
+let secureReady = false;
+let secureAuthenticated = false;
+let secureBusy = false;
+let secureTimer = null;
+
+function secureOperations() {
+  try {
+    const operations = JSON.parse(localStorage.getItem(PRIVATE_QUEUE_KEY) || '[]');
+    return Array.isArray(operations) ? operations : [];
+  } catch { return []; }
+}
+function queueSecureOperation(op) {
+  const queue = secureOperations().filter(existing => existing.id !== op.id);
+  queue.push({...op,operationId:genId()});
+  localStorage.setItem(PRIVATE_QUEUE_KEY,JSON.stringify(queue));
+  if (secureAuthenticated) scheduleSecureSync();
+}
+function scheduleSecureSync() {
+  clearTimeout(secureTimer);
+  secureTimer = setTimeout(secureSync,1000);
+}
+function secureMessage(message,cls='') {
+  const el=document.getElementById('secure-status');
+  el.textContent=message;
+  el.className='sync-status'+(cls?' '+cls:'');
+}
+function updateSecureControls(login='') {
+  document.getElementById('secure-sync-panel').hidden=!secureReady;
+  document.getElementById('legacy-sync-panel').hidden=secureReady;
+  document.getElementById('secure-login').hidden=secureAuthenticated;
+  document.getElementById('secure-account').hidden=!secureAuthenticated;
+  document.getElementById('secure-account-name').textContent=login ? '@'+login : 'Compte GitHub';
+  document.getElementById('sync-privacy').textContent=secureReady
+    ? '🔒 Candidatures conservées sur cet appareil et dans votre dépôt GitHub privé. Synchronisation après connexion.'
+    : '🔒 Vos données restent dans ce navigateur, sauf synchronisation volontaire.';
+}
+async function secureFetch(path,options={}) {
+  const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options});
+  let result={};
+  try { result=await response.json(); } catch { /* serveur non JSON */ }
+  if (!response.ok) {
+    const error=new Error(result.error || `Erreur de synchronisation (${response.status}).`);
+    error.status=response.status;
+    error.ids=result.ids;
+    throw error;
+  }
+  return result;
+}
+function applySecureSnapshot(snapshot) {
+  const live=new Map((snapshot.records || []).map(j => [j.id,j]));
+  const deleted=new Map((snapshot.tombstones || []).map(t => [t.id,t.deletedAt]));
+  for (const op of secureOperations()) {
+    if (op.type==='delete') { live.delete(op.id);continue; }
+    if (op.type==='upsert' && op.job) live.set(op.id,op.job);
+  }
+  jobs=[...live.values()];
+  persist();
+  render();renderRAV();
+}
+async function secureSync() {
+  if (!secureAuthenticated || secureBusy || !navigator.onLine) return;
+  secureBusy=true;
+  secureMessage('☁ Synchronisation en cours…');
+  try {
+    if (!localStorage.getItem(PRIVATE_INIT_KEY)) {
+      // Premier passage : les anciennes données locales sont proposées une fois
+      // au serveur, sans détruire d'abord la copie locale.
+      const pending=new Set(secureOperations().map(op=>op.id));
+      for (const j of jobs) if (j.id && !pending.has(j.id)) queueSecureOperation({type:'upsert',id:j.id,job:j});
+    }
+    let snapshot;
+    const sent=secureOperations().slice(0,150);
+    if (sent.length) {
+      snapshot=await secureFetch('/api/jobs',{
+        method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({operations:sent.map(({operationId,...op})=>op)})
+      });
+      const acknowledgements=new Set(sent.map(op=>op.operationId));
+      localStorage.setItem(PRIVATE_QUEUE_KEY,JSON.stringify(secureOperations().filter(op=>!acknowledgements.has(op.operationId))));
+    } else {
+      snapshot=await secureFetch('/api/jobs');
+    }
+    applySecureSnapshot(snapshot);
+    if (!secureOperations().length) localStorage.setItem(PRIVATE_INIT_KEY,'1');
+    secureMessage(secureOperations().length
+      ? `✓ Sauvegarde partielle, ${secureOperations().length} modification(s) en attente.`
+      : `✓ Synchronisé à ${new Date().toLocaleTimeString('fr-CH')}`,'ok');
+    if (secureOperations().length) scheduleSecureSync();
+  } catch(error) {
+    if (error.status===401) {
+      secureAuthenticated=false;
+      updateSecureControls();
+      secureMessage('Session expirée. Reconnectez-vous à GitHub.','err');
+    } else if (error.status===409) {
+      secureMessage(`⚠ Conflit pour ${error.ids?.length || 1} candidature(s). Vos changements restent sur cet appareil. Exportez un JSON avant toute résolution.`, 'err');
+    } else {
+      secureMessage('⚠ Hors synchronisation : '+error.message+'. Les changements restent sur cet appareil.','err');
+    }
+  } finally {secureBusy=false;}
+}
+async function initSecureSync() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const me=await secureFetch('/api/me');
+    if (!me.enabled) return;
+    secureReady=true;
+    // Nettoyer les anciens jetons manuels sur l'hébergement sécurisé.
+    try {
+      const legacy=JSON.parse(localStorage.getItem(GH_CONFIG_KEY)||'{}');
+      if (legacy.token) {delete legacy.token;localStorage.setItem(GH_CONFIG_KEY,JSON.stringify(legacy));}
+      sessionStorage.removeItem(GH_SESSION_TOKEN);
+    } catch { /* rien à migrer */ }
+    secureAuthenticated=Boolean(me.authenticated);
+    updateSecureControls(me.login);
+    if (secureAuthenticated) secureSync();
+    else secureMessage('Connexion GitHub nécessaire pour synchroniser.');
+  } catch { /* Fichier local ou hébergement sans backend : mode manuel inchangé. */ }
+}
+async function secureLogout() {
+  if (!confirm('Se déconnecter ? Les candidatures déjà chargées resteront visibles sur cet appareil.')) return;
+  try {
+    await secureFetch('/api/logout',{method:'POST'});
+    secureAuthenticated=false;
+    updateSecureControls();
+    secureMessage('Déconnecté. Les données locales restent accessibles.');
+  } catch(e) {secureMessage('Déconnexion impossible : '+e.message,'err');}
+}
+
 // ===== INIT =====
 load();
+initSecureSync();
+window.addEventListener('online',()=>{if(secureAuthenticated) scheduleSecureSync();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden && secureAuthenticated) scheduleSecureSync();});
+setInterval(()=>{if(secureAuthenticated) secureSync();},90000);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Mode hors ligne indisponible :',err));
 }
