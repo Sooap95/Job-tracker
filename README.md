@@ -27,8 +27,8 @@ Les données sont enregistrées dans `localStorage`. Sur l'interface locale, ell
 
 ### 1. Préparer GitHub
 
-1. Créer un **second dépôt privé**, distinct de `Job-tracker`, par exemple `Sooap95/job-tracker-private-data`. Ne jamais y activer GitHub Pages.
-2. Préparer sa branche `main`, par exemple avec un README. Le fichier `data/jobs.json` sera créé lors de la première synchronisation.
+1. Réutiliser le dépôt **privé** existant `Sooap95/job-tracker-data`, distinct du dépôt public `Job-tracker`. Ne jamais y activer GitHub Pages.
+2. Conserver le fichier historique `data/jobs.json` sans le modifier. La nouvelle synchronisation utilisera **`data/jobs-v2.json`**, créé séparément lors du premier envoi.
 3. Créer un **fine-grained personal access token** réservé à ce **seul** dépôt privé, avec la permission **Contents: Read and write**. Il sera enregistré **uniquement comme secret Worker**, jamais dans l'application ou un commit.
 4. Créer une **GitHub OAuth App** dans les paramètres développeur GitHub. L'adresse de sa page d'accueil sera l'URL HTTPS du Worker, et le callback devra être exactement `https://VOTRE-ADRESSE/auth/github/callback`. Le client ID et son secret seront utilisés côté Worker. Ce login demande uniquement l'identité, sans autorisation `repo`.
 5. Vérifier l'identifiant numérique du **seul** compte GitHub autorisé. Utiliser ce nombre, stable même si le pseudonyme change, pour `ALLOWED_GITHUB_USER_ID`.
@@ -39,7 +39,7 @@ La GitHub OAuth App valide l'identité. Elle **n'accède pas aux candidatures**.
 
 Installer les dépendances de développement avec `npm install`. Créer le Worker avec `npx wrangler deploy` uniquement après avoir configuré les éléments ci-dessous.
 
-Le fichier `wrangler.jsonc` configure l'interface statique sous `dist/`, le backend sous `worker/index.js`, la branche `main` et le chemin `data/jobs.json`. Le déploiement utilise `npm run deploy` (exécute la construction statique puis publie). Il peut être nécessaire d'effectuer un premier déploiement pour obtenir son URL avant de créer le callback GitHub, puis de redéployer avec les secrets.
+Le fichier `wrangler.jsonc` configure l'interface statique sous `dist/`, le backend sous `worker/index.js`, la branche `main` et le chemin `data/jobs-v2.json`. Le déploiement utilise `npm run deploy` (exécute la construction statique puis publie). Il peut être nécessaire d'effectuer un premier déploiement pour obtenir son URL avant de créer le callback GitHub, puis de redéployer avec les secrets.
 
 Définir ces secrets dans Cloudflare avec `npx wrangler secret put NOM_DU_SECRET` :
 
@@ -60,7 +60,7 @@ Vérifier ensuite `/api/me`, qui doit retourner `enabled: true`. L'application p
 2. Ouvrir la version hébergée **sur l'appareil qui contient la liste la plus complète**, puis importer ce JSON si nécessaire.
 3. Se connecter et attendre l'indication « Synchronisé ». Vérifier les dossiers et le rapport RAV.
 4. Ouvrir la même adresse sur le second appareil, se connecter et attendre la récupération.
-5. Éviter d'utiliser en même temps l'ancien synchroniseur manuel sur `data/jobs.json` : il ne comprend pas la structure V2 (`records` et `tombstones`).
+5. Ne pas réutiliser `data/jobs.json` pour le nouveau système : le fichier historique reste intact, et `data/jobs-v2.json` contient le nouveau format (`records` et `tombstones`).
 
 Les opérations non transmises restent dans le navigateur, même sans réseau. Le serveur compare les dates `updatedAt` et conserve les suppressions. En cas de version incompatible, il **refuse d'écraser les données** et laisse la copie locale intacte, avec une alerte. La résolution de ce cas rare demande encore une intervention manuelle et une sauvegarde préalable. Il n'existe pas de fusion automatique champ par champ. Une horloge d'appareil incorrecte peut également déclencher un conflit.
 
