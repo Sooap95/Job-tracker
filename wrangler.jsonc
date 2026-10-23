@@ -10,6 +10,6 @@
   },
   "vars": {
     "DATA_BRANCH": "main",
-    "DATA_PATH": "data/jobs.json"
+    "DATA_PATH": "data/jobs-v2.json"
   }
 }
