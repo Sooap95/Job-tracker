@@ -102,3 +102,49 @@ test('callback refuses another GitHub identity',async()=>{
     assert.equal(response.headers.get('Set-Cookie').includes('__Host-jt_session'),false);
   } finally {globalThis.fetch=originalFetch;}
 });
+
+test('authorized account can save privately without exposing the repository token',async()=>{
+  const start=await worker.fetch(new Request(origin+'/auth/github/start'),env);
+  const firstCookie=start.headers.get('Set-Cookie').split(';')[0];
+  const state=new URL(start.headers.get('Location')).searchParams.get('state');
+  const originalFetch=globalThis.fetch;
+  let remote=null;
+  let storedSha='';
+  globalThis.fetch=async(url,opts={})=>{
+    if (String(url).includes('/login/oauth/access_token')) return Response.json({access_token:'login-only-token'});
+    if (String(url)==='https://api.github.com/user') return Response.json({id:152836698,login:'Sooap95'});
+    if (String(url).includes('/repos/owner/private-data/contents/data/jobs.json')) {
+      assert.equal(opts.headers.Authorization,'Bearer private-test-token');
+      if (opts.method==='GET') return remote===null ? new Response(null,{status:404}) : Response.json({sha:storedSha,content:Buffer.from(JSON.stringify(remote)).toString('base64')});
+      if (opts.method==='PUT') {
+        const sent=JSON.parse(opts.body);
+        remote=JSON.parse(Buffer.from(sent.content,'base64').toString('utf8'));
+        storedSha='new-blob-sha';
+        return Response.json({content:{sha:storedSha}});
+      }
+    }
+    throw new Error('Unexpected request: '+url);
+  };
+  try {
+    const result=await worker.fetch(new Request(origin+'/auth/github/callback?state='+state+'&code=test',{
+      headers:{Cookie:firstCookie}
+    }),env);
+    assert.equal(result.status,302);
+    const sessionCookie=result.headers.getSetCookie().find(c=>c.startsWith('__Host-jt_session=')).split(';')[0];
+    const put=await worker.fetch(new Request(origin+'/api/jobs',{
+      method:'PUT',headers:{Origin:origin,Cookie:sessionCookie,'Content-Type':'application/json'},
+      body:JSON.stringify({operations:[{type:'upsert',id:'a',job:record('First private save')}]})
+    }),env);
+    assert.equal(put.status,200);
+    assert.equal(remote.records[0].role,'First private save');
+    assert.equal((await put.text()).includes('private-test-token'),false);
+    const get=await worker.fetch(new Request(origin+'/api/jobs',{headers:{Cookie:sessionCookie}}),env);
+    assert.equal(get.status,200);
+    assert.equal((await get.json()).records[0].role,'First private save');
+    const badOrigin=await worker.fetch(new Request(origin+'/api/jobs',{
+      method:'PUT',headers:{Origin:'https://attacker.example',Cookie:sessionCookie},
+      body:JSON.stringify({operations:[]})
+    }),env);
+    assert.equal(badOrigin.status,403);
+  } finally {globalThis.fetch=originalFetch;}
+});

@@ -468,7 +468,11 @@ function importJSON(event) {
     try {
       const data = JSON.parse(e.target.result);
       if (!Array.isArray(data)) throw new Error('Format invalide');
+      if (data.some(j => !j || typeof j !== 'object' || typeof j.role !== 'string')) throw new Error('Certaines candidatures sont invalides.');
+      const ids = data.map(j => j.id).filter(Boolean);
+      if (new Set(ids).size !== ids.length) throw new Error('Des identifiants de candidature sont en double.');
       if (!confirm(`Importer ${data.length} candidature(s) ? Les données actuelles seront remplacées.`)) return;
+      if (secureReady && !confirm('Attention : sur cette version synchronisée, les données importées remplaceront aussi les versions plus anciennes dans le dépôt privé. Avez-vous conservé une sauvegarde ?')) return;
       const importedIds = new Set(data.map(j => j.id));
       jobs.filter(j => !importedIds.has(j.id)).forEach(j => queueSecureOperation({type:'delete',id:j.id,at:new Date().toISOString()}));
       jobs = data.map(j => ({...j,id:j.id || genId(),updatedAt:new Date().toISOString()}));
