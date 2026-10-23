@@ -408,6 +408,8 @@ function save() {
   if (status === 'A postuler' && date && !confirm('Une date d\'envoi est renseignée, mais le statut est « À postuler ». Conserver cette combinaison ? La candidature sera exclue du rapport RAV.')) return;
 
   const j = {
+    // Préserver les champs importés non représentés dans le formulaire (ex. fit_score).
+    ...(original || {}),
     id: editId || genId(),
     role, co, date,
     status,
