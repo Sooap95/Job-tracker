@@ -137,15 +137,15 @@ function render() {
       <td class="td-role" title="${esc(j.role)}">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border2);" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='inherit'">${esc(j.role)||'—'}</a>` : (esc(j.role)||'—')}</td>
       <td class="td-co" title="${esc(j.co)}">${esc(j.co)||'—'}</td>
       <td style="white-space:nowrap;color:var(--text2)">${fmtDate(j.date)}</td>
-      <td><span class="badge ${statusClass(j.status)}">${esc(j.status)||'—'}</span></td>
+      <td title="${esc(j.status)}"><span class="badge ${statusClass(j.status)}">${esc(j.status)||'—'}</span></td>
       <td>${j.priorite ? `<span class="badge ${PRIO_CLASS[j.priorite]||''}">${esc(j.priorite)}</span>` : '—'}</td>
       <td style="color:var(--text2);white-space:nowrap">${esc(j.salaire)||'—'}</td>
       <td><span class="badge ${rc ? 'b-rav-ok' : 'b-rav-no'}">${rc ? '✓ OK' : '⚠ Incomplet'}</span></td>
       <td>${j.resultat ? `<span style="font-size:12px;color:var(--text2)">${esc(j.resultat)}</span>` : '—'}</td>
       <td class="td-notes" title="${esc(j.notes)}">${esc(j.notes)||'—'}</td>
       <td>
-        <div style="display:flex;gap:5px">
-          <button class="btn btn-sm btn-icon" onclick="openModal(${jsArg(j.id)})" title="Modifier">✏</button>
+        <div class="row-actions">
+          <button class="btn btn-sm btn-icon" onclick="openModal(${jsArg(j.id)})" title="Consulter ou modifier" aria-label="Consulter ou modifier ${esc(j.role)}">✏</button>
           <button class="btn btn-sm btn-icon btn-danger" onclick="delJob(${jsArg(j.id)})" title="Supprimer">✕</button>
         </div>
       </td>
