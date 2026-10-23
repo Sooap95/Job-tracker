@@ -1,47 +1,58 @@
-# Job Tracker — Suivi de candidatures RAV
+# Job Tracker 2.0
 
-Outil local (HTML/CSS/JS, sans backend) pour suivre les candidatures d'emploi et générer le rapport mensuel "Preuves de recherches personnelles d'emploi" pour l'ORP/RAV suisse.
+Application personnelle de suivi des candidatures et de préparation des rapports mensuels RAV / ORP en Suisse.
 
-## Utilisation
+## Nouveautés de la V2
 
-Ouvrez `index.html` directement dans un navigateur (double-clic, ou `file://...`). Aucune installation, aucun serveur requis.
+- Interface responsive, navigation latérale sur ordinateur et navigation inférieure sur mobile.
+- Tableau de bord présentant les candidatures, les prochaines actions et la progression du rapport RAV.
+- Vues liste, cartes sur mobile et tableau Kanban.
+- Ajout rapide d'une candidature, avec champs complémentaires RAV accessibles séparément.
+- Dates limites et dates de relance.
+- Les offres marquées **« A postuler »** ne figurent plus dans le rapport RAV, même si une date est renseignée.
+- PWA avec mise en cache des fichiers de l'interface uniquement, sur HTTPS ou localhost.
+- Conservation des données au format JSON d'origine, dans la clé navigateur `jobtracker_v3`.
 
-Les données sont stockées dans le `localStorage` du navigateur — elles restent tant que vous utilisez le même navigateur sur le même appareil.
+## Démarrage
 
-## Sauvegarde
+Ouvrir `index.html` fonctionne toujours sans serveur. Pour tester la PWA et le service worker, servir les fichiers localement avec un petit serveur web ou les héberger en HTTPS.
 
-- **Export** (bouton en haut) : télécharge un fichier JSON de toutes vos candidatures. À faire régulièrement.
-- **Import** : remplace toutes les données actuelles par celles d'un fichier JSON.
-- **Fusionner** : ajoute/actualise les candidatures d'un fichier JSON sans supprimer les existantes (dédoublonnage par `id`, sinon par entreprise+poste+date).
+Les données sont enregistrées dans `localStorage` et ne quittent pas le navigateur tant qu'une synchronisation GitHub n'est pas lancée. Exporter régulièrement une sauvegarde JSON indépendante.
 
-## Synchronisation GitHub (optionnelle, multi-appareils)
+## Confidentialité
 
-Le bouton ⚙ ouvre la configuration de synchronisation. Elle permet de pousser (☁ ↑) et récupérer (☁ ↓) vos candidatures depuis un **dépôt GitHub privé dédié aux données** (distinct de celui-ci si vous versionnez aussi le code).
+Le dépôt de code peut être public : **il ne doit jamais contenir de candidatures réelles, sauvegardes personnelles ou tokens**.
 
-Étapes recommandées :
+L'ancienne synchronisation manuelle avec un **second dépôt GitHub privé** est conservée temporairement. Pour l'utiliser :
 
-1. Créez un **second dépôt GitHub privé** réservé aux données (ex. `job-tracker-data`), séparé du dépôt de code. Ainsi, si vous partagez un jour le code de l'outil, vos données personnelles ne sont jamais dans le même historique Git.
-2. Créez un **token d'accès personnel fine-grained** sur GitHub (Settings → Developer settings → Personal access tokens → Fine-grained tokens), limité à ce seul dépôt, avec la permission **Contents: Read and write** uniquement.
-3. Dans l'outil, cliquez ⚙ et renseignez owner / repo / branche / chemin (`data/jobs.json` par défaut) / token.
+1. Créer un dépôt GitHub privé dédié aux données.
+2. Créer un token *fine-grained*, limité à ce dépôt avec la permission Contents en lecture/écriture.
+3. Utiliser « Configurer GitHub » dans l'application, puis « Récupérer » et « Envoyer ».
 
-⚠️ Le token est stocké en clair dans le `localStorage` de ce navigateur. N'utilisez cette fonctionnalité que sur un appareil de confiance, et révoquez le token depuis GitHub si vous n'en avez plus besoin.
+Le token n'est plus conservé dans `localStorage`. Il est tenu dans `sessionStorage` pour la session du navigateur (et reste donc accessible au JavaScript de la page). Une ancienne configuration qui contenait un token en `localStorage` est migrée automatiquement.
 
-## Hébergement — ce qu'il faut savoir
+### Limites connues de la synchronisation
 
-Ce dépôt de **code** peut être poussé sur GitHub en privé sans risque : il ne contient aucune donnée personnelle (voir `.gitignore`).
+- **Ce n'est pas encore une synchronisation automatique avec authentification sécurisée.** Ne la présenter ni comme telle ni comme un système chiffré de bout en bout.
+- « Envoyer » bloque une écriture si la version distante diffère de la dernière version récupérée. Sur un nouvel appareil, utiliser d'abord « Récupérer ».
+- Lors d'une récupération, une version ambiguë ou plus ancienne ne remplace pas silencieusement les modifications locales. Les conflits sont signalés, mais leur résolution reste manuelle.
+- Les suppressions ne possèdent pas encore de mécanisme de synchronisation dédié. Une candidature supprimée localement peut réapparaître depuis une ancienne sauvegarde.
+- Ne jamais stocker le token dans le dépôt de code. GitHub Pages peut publier l'interface, pas les données.
 
-⚠️ **N'activez pas GitHub Pages sur ce dépôt s'il contient vos données** (dossier `data/`) — sur un compte GitHub gratuit, un site Pages reste **public** même si le dépôt est privé (l'option "rendre Pages privé" nécessite un plan payant GitHub Pro/Team/Enterprise). L'usage prévu ici est :
+Une phase distincte doit introduire l'authentification utilisateur, la conservation des secrets côté serveur, la synchronisation automatique et la résolution fiable des conflits. Aucun identifiant serveur ni accès à des candidatures réelles n'est nécessaire pour évaluer cette V2.
 
-- Le **code** (`index.html`, `style.css`, `app.js`) versionné sur GitHub, ouvert localement en `file://`.
-- Les **données** synchronisées via l'API GitHub (bouton ☁) vers un dépôt privé séparé, jamais via Pages.
+## Sauvegardes et rapports RAV
 
-## Structure
+- **Sauvegarder en JSON** : export intégral des candidatures.
+- **Restaurer** : remplace les données locales après confirmation.
+- **Fusionner** : ajoute ou actualise les candidatures, avec dédoublonnage par identifiant puis entreprise + poste + date.
+- Le rapport mensuel RAV propose CSV et impression / PDF via le navigateur.
 
-```
-job-tracker/
-├── index.html   ← structure de la page
-├── style.css    ← thème et mise en page
-├── app.js       ← logique de l'application
-├── .gitignore   ← exclut les exports JSON réels
-└── README.md
-```
+La vérification de complétude RAV dans l'outil constitue une aide à la saisie, pas une validation officielle des informations exigées par l'ORP.
+
+## Fichiers
+
+- `index.html` : interface et formulaires
+- `style.css` : design responsive
+- `app.js` : suivi, sauvegardes, rapports et synchronisation manuelle
+- `manifest.webmanifest`, `icon.svg`, `sw.js` : installation et mise en cache PWA
