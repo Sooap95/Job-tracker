@@ -57,10 +57,27 @@ async function login(req,env) {
 }
 async function callback(req,env) {
   const url=new URL(req.url);
-  const flow=await verified(readCookie(req,'__Host-jt_oauth'),env.SESSION_SIGNING_KEY);
+  const rawFlow=readCookie(req,'__Host-jt_oauth');
+  const flow=await verified(rawFlow,env.SESSION_SIGNING_KEY);
   const cleared=cookie('__Host-jt_oauth','',0);
-  if (!flow || seconds()-flow.iat > 600 || flow.state!==url.searchParams.get('state') || !url.searchParams.get('code'))
-    return json({error:'Connexion expirée ou invalide.'},400,{'Set-Cookie':cleared});
+  const fail=message=>json({error:message},400,{'Set-Cookie':cleared});
+  if (!rawFlow) return fail('Cookie temporaire de connexion absent. Relancez la connexion depuis Job Tracker dans le même navigateur.');
+  if (!flow) return fail('Cookie temporaire de connexion invalide. Relancez la connexion dans le même navigateur.');
+  if (typeof flow.iat!=='number' || seconds()-flow.iat > 600 || flow.iat > seconds()+60)
+    return fail('Connexion expirée après 10 minutes. Recommencez depuis Job Tracker.');
+  if (flow.state!==url.searchParams.get('state'))
+    return fail('État de connexion différent. Fermez les anciennes tentatives et recommencez depuis Job Tracker.');
+  // GitHub peut signaler un échec de l'autorisation directement dans le callback, sans code.
+  // Ne jamais retourner error_description ni les paramètres de la requête au navigateur.
+  if (url.searchParams.has('error')) {
+    const errors={
+      redirect_uri_mismatch:'URL de retour GitHub incorrecte. Vérifiez le callback de votre OAuth App.',
+      access_denied:'Autorisation GitHub refusée. Recommencez et acceptez la demande de connexion.',
+      application_suspended:'Application OAuth GitHub suspendue.'
+    };
+    return fail('GitHub a refusé l’autorisation : '+(errors[url.searchParams.get('error')]||'demande non validée.'));
+  }
+  if (!url.searchParams.get('code')) return fail('GitHub n’a pas fourni de code d’autorisation. Recommencez la connexion.');
   const callbackUrl=new URL('/auth/github/callback',req.url).href;
   const response=await fetch('https://github.com/login/oauth/access_token',{
     method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},
