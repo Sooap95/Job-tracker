@@ -72,6 +72,7 @@
         <select id="fStatus" onchange="render()">
           <option value="">Tous statuts</option>
           <option>A postuler</option><option>En cours</option>
+          <option value="Soumis">Soumis (y compris statuts importés)</option>
           <option>Attente de retour</option><option>Refusé</option><option>Accepté</option>
         </select>
         <select id="fPriorite" onchange="render()">
@@ -210,6 +211,8 @@
           <label>Statut</label>
           <select id="f-status">
             <option>A postuler</option><option>En cours</option>
+            <option>Soumis</option><option value="Soumise">Soumise (historique)</option>
+            <option value="Soumis (RAV quota octobre)">Soumis (quota RAV, historique)</option>
             <option>Attente de retour</option><option>Refusé</option><option>Accepté</option>
           </select>
         </div>
@@ -311,6 +314,7 @@
           <div class="radio-group">
             <label class="radio-item"><input type="radio" name="taux" id="f-t-plein" value="A plein temps" checked> A plein temps</label>
             <label class="radio-item"><input type="radio" name="taux" id="f-t-partiel" value="A temps partiel"> A temps partiel</label>
+            <label class="radio-item"><input type="radio" name="taux" id="f-t-fourchette" value="80-100%"> 80 à 100 %</label>
           </div>
         </div>
         <div class="fg form-full">
