@@ -84,7 +84,7 @@ test('legacy GitHub token is migrated from persistent to session storage', () =>
 
 test('imported submitted records open for editing and retain legacy occupation values', () => {
   const app = createApp([
-    {id:'submitted',role:'Submitted position',co:'Example',status:'Soumis',taux:'80-100%',orp:'Oui',date:'2026-10-10'}
+    {id:'submitted',role:'Submitted position',co:'Example',status:'Soumis',taux:'80-100%',orp:'Oui',date:'2026-10-10',fit_score:87}
   ]);
   assert.doesNotThrow(() => app.run("openModal('submitted')"));
   assert.equal(app.elements.get('f-role').value,'Submitted position');
@@ -93,6 +93,7 @@ test('imported submitted records open for editing and retain legacy occupation v
   assert.equal(app.run('jobs[0].taux'),'80-100%');
   assert.equal(app.run('jobs[0].status'),'Soumis');
   assert.equal(app.run('jobs[0].orp'),'Oui');
+  assert.equal(app.run('jobs[0].fit_score'),87);
 });
 
 test('historical submitted variants are searchable and appear on the board', () => {
