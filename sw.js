@@ -1,5 +1,5 @@
 // Cache de l'interface uniquement. Aucune candidature ni réponse GitHub en cache.
-const CACHE_NAME = 'job-tracker-shell-v2-1';
+const CACHE_NAME = 'job-tracker-shell-v2-2';
 const SHELL = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

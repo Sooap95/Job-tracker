@@ -27,14 +27,25 @@
       <button class="side-action" onclick="exportJSON()">↓ Sauvegarder en JSON</button>
       <label class="side-action file-action">↑ Restaurer une sauvegarde<input type="file" accept=".json" onchange="importJSON(event)" hidden></label>
       <label class="side-action file-action">⇄ Fusionner une sauvegarde<input type="file" accept=".json" onchange="mergeJSON(event)" hidden></label>
-      <div class="sync-actions">
-        <button class="side-action" onclick="ghPull()" title="Fusionner les données du dépôt privé">☁ Récupérer</button>
-        <button class="side-action" onclick="ghPush()" title="Envoyer vers le dépôt privé">☁ Envoyer</button>
+      <div id="secure-sync-panel" hidden>
+        <div id="secure-login"><a class="side-action login-action" href="/auth/github/start">🔐 Se connecter avec GitHub</a></div>
+        <div id="secure-account" hidden>
+          <span class="account-label" id="secure-account-name"></span>
+          <button class="side-action" onclick="secureSync()">☁ Synchroniser maintenant</button>
+          <button class="side-action" onclick="secureLogout()">Se déconnecter</button>
+        </div>
+        <span class="sync-status" id="secure-status" role="status" aria-live="polite"></span>
       </div>
-      <button class="side-action" onclick="ghConfigOpen()">⚙ Configurer GitHub</button>
-      <span class="sync-status" id="gh-status" role="status" aria-live="polite">Données locales sur cet appareil</span>
+      <div id="legacy-sync-panel">
+        <div class="sync-actions">
+          <button class="side-action" onclick="ghPull()" title="Fusionner les données du dépôt privé">☁ Récupérer</button>
+          <button class="side-action" onclick="ghPush()" title="Envoyer vers le dépôt privé">☁ Envoyer</button>
+        </div>
+        <button class="side-action" onclick="ghConfigOpen()">⚙ Configurer GitHub</button>
+        <span class="sync-status" id="gh-status" role="status" aria-live="polite">Données locales sur cet appareil</span>
+      </div>
     </div>
-    <div class="nav-privacy">🔒 Vos données restent dans ce navigateur, sauf synchronisation volontaire.</div>
+    <div class="nav-privacy" id="sync-privacy">🔒 Vos données restent dans ce navigateur, sauf synchronisation volontaire.</div>
   </header>
 
   <main class="main">
@@ -156,7 +167,7 @@
         <div style="font-size:13px;color:var(--text2);line-height:1.8">
           Les données sont stockées dans le <strong>localStorage</strong> de votre navigateur — elles persistent tant que vous ouvrez ce fichier dans le même navigateur.<br><br>
           ⚠️ <strong>Important :</strong> faites régulièrement un export JSON (bouton "Export" en haut) et sauvegardez le fichier dans <code>backup_jobs.json</code>. En cas de réinstallation OS ou changement de navigateur, utilisez "Import" pour restaurer.<br><br>
-          🔄 Vous pouvez aussi configurer la <strong>synchronisation GitHub</strong> (bouton ⚙ en haut) pour sauvegarder et récupérer vos données depuis un dépôt privé, et travailler depuis plusieurs appareils.
+          🔄 Sur la version hébergée avec le serveur sécurisé, connectez votre compte GitHub pour activer la synchronisation automatique. Sur une version locale, la synchronisation manuelle reste disponible (bouton ⚙). Une copie locale de vos données est conservée sur chaque appareil.
         </div>
       </div>
     </div>

@@ -1,0 +1,15 @@
+{
+  "name": "job-tracker-private",
+  "main": "./worker/index.js",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/auth/*"],
+    "not_found_handling": "404-page"
+  },
+  "vars": {
+    "DATA_BRANCH": "main",
+    "DATA_PATH": "data/jobs.json"
+  }
+}

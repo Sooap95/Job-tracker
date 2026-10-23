@@ -2,3 +2,8 @@
 backup_jobs*.json
 data/*.json
 *.local.json
+# Fichiers temporaires de publication et secrets locaux
+dist/
+node_modules/
+.dev.vars*
+.env*
