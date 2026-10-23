@@ -4,6 +4,7 @@ let jobs = [];
 let editId = null;
 let ravYear = new Date().getFullYear();
 let ravMonth = new Date().getMonth(); // 0-indexed
+let currentView = 'list';
 
 const MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -18,6 +19,9 @@ const PRIO_ORDER = {'Job de rêve':0,'Offre intéressante':1,'Backup':2,'':3};
 // ===== SECURITY HELPERS =====
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function jsArg(s) {
+  return esc(JSON.stringify(String(s ?? '')));
 }
 function safeUrl(u) {
   if (!u) return '';
@@ -42,13 +46,18 @@ function persist() {
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 function fmtDate(d) {
-  if (!d) return '—';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) return '—';
   const p = d.split('-');
   return p[2] + '.' + p[1] + '.' + p[0].slice(2);
 }
+function niceDate(d) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) return '';
+  const [y,m,day] = d.split('-');
+  return day + '.' + m + '.' + y;
+}
 
 function ravComplete(j) {
-  return !!(j.date && j.co && j.role && (j.m_email || j.m_lettre || j.m_contact || j.m_tel));
+  return !!(j.status !== 'A postuler' && j.date && j.co && j.role && (j.m_email || j.m_lettre || j.m_contact || j.m_tel));
 }
 
 // ===== SWITCH TABS =====
@@ -56,11 +65,29 @@ function switchTab(tab) {
   ['dashboard','rav','dossier'].forEach(t => {
     document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
   });
-  document.querySelectorAll('.nav-tab').forEach((el, i) => {
-    const tabs = ['dashboard','rav','dossier'];
-    el.classList.toggle('active', tabs[i] === tab);
+  document.querySelectorAll('[data-tab]').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
   });
+  document.getElementById('mobile-settings-panel').classList.remove('open');
+  document.querySelector('.mobile-menu').setAttribute('aria-expanded','false');
+  window.scrollTo({top:0,behavior:'auto'});
   if (tab === 'rav') renderRAV();
+}
+function toggleMobileSettings() {
+  const panel = document.getElementById('mobile-settings-panel');
+  const open = panel.classList.toggle('open');
+  document.querySelector('.mobile-menu').setAttribute('aria-expanded',String(open));
+}
+function switchView(view) {
+  currentView = view;
+  document.getElementById('list-view').hidden = view !== 'list';
+  document.getElementById('mobile-cards').hidden = view !== 'list';
+  document.getElementById('kanban-view').hidden = view !== 'board';
+  for(const [id,active] of [['view-list',view === 'list'],['view-board',view === 'board']]) {
+    const b=document.getElementById(id);
+    b.classList.toggle('active',active);
+    b.setAttribute('aria-pressed',String(active));
+  }
 }
 
 // ===== DASHBOARD RENDER =====
@@ -82,12 +109,16 @@ function render() {
   if (so === 'date_desc') data.sort((a,b) => (b.date||'').localeCompare(a.date||''));
   else if (so === 'date_asc') data.sort((a,b) => (a.date||'').localeCompare(b.date||''));
   else if (so === 'entreprise') data.sort((a,b) => (a.co||'').localeCompare(b.co||''));
-  else if (so === 'priorite') data.sort((a,b) => (PRIO_ORDER[a.priorite||'']||3) - (PRIO_ORDER[b.priorite||'']||3));
+  else if (so === 'priorite') data.sort((a,b) => (PRIO_ORDER[a.priorite||''] ?? 3) - (PRIO_ORDER[b.priorite||''] ?? 3));
 
   const tb = document.getElementById('tbody');
   if (!data.length) {
     tb.innerHTML = `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div>Aucune candidature trouvée.<br><small>Cliquez sur "+ Nouvelle candidature" pour commencer.</small></div></td></tr>`;
     renderStats();
+    renderMobileCards([]);
+    renderBoard([]);
+    renderDashboardPanels();
+    switchView(currentView);
     return;
   }
 
@@ -106,32 +137,92 @@ function render() {
       <td class="td-notes" title="${esc(j.notes)}">${esc(j.notes)||'—'}</td>
       <td>
         <div style="display:flex;gap:5px">
-          <button class="btn btn-sm btn-icon" onclick="openModal('${j.id}')" title="Modifier">✏</button>
-          <button class="btn btn-sm btn-icon btn-danger" onclick="delJob('${j.id}')" title="Supprimer">✕</button>
+          <button class="btn btn-sm btn-icon" onclick="openModal(${jsArg(j.id)})" title="Modifier">✏</button>
+          <button class="btn btn-sm btn-icon btn-danger" onclick="delJob(${jsArg(j.id)})" title="Supprimer">✕</button>
         </div>
       </td>
     </tr>`;
   }).join('');
 
   renderStats();
+  renderMobileCards(data);
+  renderBoard(data);
+  renderDashboardPanels();
+  switchView(currentView);
 }
 
 function renderStats() {
   const total = jobs.length;
   const counts = {'A postuler':0,'En cours':0,'Attente de retour':0,'Refusé':0,'Accepté':0};
   jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
-  const ravOK = jobs.filter(ravComplete).length;
-  const thisMonth = new Date().toISOString().slice(0,7);
-  const thisMonthN = jobs.filter(j => j.date && j.date.slice(0,7) === thisMonth).length;
+  const thisMonth = localDateKey().slice(0,7);
+  const thisMonthJobs = jobs.filter(j => j.status !== 'A postuler' && j.date?.slice(0,7) === thisMonth);
+  const followups = jobs.filter(j => j.followup && j.followup <= localDateKey() && !['Refusé','Accepté'].includes(j.status)).length;
 
   document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card"><div class="stat-n">${total}</div><div class="stat-l">Total</div></div>
-    <div class="stat-card blue"><div class="stat-n">${counts['A postuler']}</div><div class="stat-l">A postuler</div></div>
-    <div class="stat-card amber"><div class="stat-n">${counts['En cours'] + counts['Attente de retour']}</div><div class="stat-l">En cours</div></div>
-    <div class="stat-card green"><div class="stat-n">${counts['Accepté']}</div><div class="stat-l">Accepté</div></div>
-    <div class="stat-card purple"><div class="stat-n">${thisMonthN}</div><div class="stat-l">Ce mois-ci</div></div>
-    <div class="stat-card"><div class="stat-n">${ravOK}/${total}</div><div class="stat-l">RAV complets</div></div>
+    <div class="stat-card"><div class="stat-n">${total}</div><div class="stat-l">Candidatures suivies</div></div>
+    <div class="stat-card blue"><div class="stat-n">${counts['En cours'] + counts['Attente de retour']}</div><div class="stat-l">Dossiers actifs</div></div>
+    <div class="stat-card amber"><div class="stat-n">${followups}</div><div class="stat-l">Relances à traiter</div></div>
+    <div class="stat-card green"><div class="stat-n">${thisMonthJobs.length}</div><div class="stat-l">Démarches ce mois</div></div>
   `;
+}
+
+function localDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  return `${y}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function renderDashboardPanels() {
+  const today = localDateKey();
+  document.getElementById('today-label').textContent = new Intl.DateTimeFormat('fr-CH',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date()).toUpperCase();
+  const actions = jobs
+    .filter(j => !['Refusé','Accepté'].includes(j.status))
+    .filter(j => j.followup || (j.status === 'A postuler' && j.deadline))
+    .map(j => ({j,date:j.followup || j.deadline,type:j.followup ? 'Relance / action' : 'Date limite'}))
+    .sort((a,b) => a.date.localeCompare(b.date)).slice(0,3);
+  const next = document.getElementById('next-actions');
+  next.innerHTML = actions.length ? actions.map(({j,date,type}) => `
+    <div class="action-row">
+      <div class="action-company" aria-hidden="true">${esc((j.co || '?').slice(0,1).toUpperCase())}</div>
+      <div class="action-copy"><strong>${esc(j.role)}</strong><small>${esc(j.co)} · ${esc(type)}</small></div>
+      <span class="action-date ${date>today?'later':''}">${esc(niceDate(date))}</span>
+      <button class="action-edit" onclick="openModal(${jsArg(j.id)})" aria-label="Modifier ${esc(j.role)}">Modifier</button>
+    </div>`).join('') : '<div class="quiet">Aucune échéance programmée. Ajoutez une date de relance ou une date limite dans une candidature.</div>';
+  const monthKey = today.slice(0,7);
+  const monthJobs = jobs.filter(j => j.status !== 'A postuler' && j.date?.slice(0,7) === monthKey);
+  const complete = monthJobs.filter(ravComplete).length;
+  document.getElementById('overview-month').textContent = new Intl.DateTimeFormat('fr-CH',{month:'long',year:'numeric'}).format(new Date());
+  document.getElementById('rav-overview-content').innerHTML = `
+    <div class="rav-progress-title"><strong>${complete} / ${monthJobs.length}</strong><div>démarches documentées</div></div>
+    <div class="progress-track"><div class="progress-fill" style="width:${monthJobs.length ? Math.round(100*complete/monthJobs.length) : 0}%"></div></div>
+    <div class="quiet" style="padding:0">${monthJobs.length-complete} fiche(s) à compléter. Seules les candidatures envoyées sont comptabilisées.</div>
+    <button class="rav-link" onclick="switchTab('rav')">Préparer le rapport →</button>`;
+}
+function renderMobileCards(data) {
+  const container = document.getElementById('mobile-cards');
+  container.innerHTML = data.length ? data.map(j => `
+    <article class="mobile-card">
+      <div class="action-company" aria-hidden="true">${esc((j.co||'?').slice(0,1).toUpperCase())}</div>
+      <div class="mobile-card-copy"><strong>${esc(j.role)}</strong><span class="co">${esc(j.co)}${j.date?' · '+esc(niceDate(j.date)):''}</span>
+        <div class="badges"><span class="badge ${STATUS_CLASS[j.status]||''}">${esc(j.status||'Non défini')}</span>
+        ${j.priorite?'<span class="badge '+(PRIO_CLASS[j.priorite]||'')+'">'+esc(j.priorite)+'</span>':''}
+        ${j.followup?'<span class="badge b-rav-ok">Action '+esc(niceDate(j.followup))+'</span>':''}</div>
+      </div>
+      <button class="edit" onclick="openModal(${jsArg(j.id)})" aria-label="Modifier ${esc(j.role)}">✎</button>
+    </article>`).join('') : '<div class="empty">Aucune candidature trouvée.</div>';
+}
+function renderBoard(data) {
+  const groups = [
+    ['A postuler','À postuler'],['En cours','En cours'],
+    ['Attente de retour','En attente'],['Accepté','Accepté'],['Refusé','Refusé']
+  ];
+  document.getElementById('kanban-view').innerHTML = groups.map(([status,label]) => {
+    const col = data.filter(j => j.status === status);
+    return `<section class="kanban-column"><div class="kanban-title">${esc(label)} <span class="kanban-count">${col.length}</span></div>
+      ${col.length ? col.map(j => `<div class="kanban-card" role="button" tabindex="0" onclick="openModal(${jsArg(j.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModal(${jsArg(j.id)})}">
+        <strong>${esc(j.role)}</strong><small>${esc(j.co)}</small>
+        ${j.priorite?'<span class="badge '+(PRIO_CLASS[j.priorite]||'')+'">'+esc(j.priorite)+'</span>':''}
+      </div>`).join('') : '<div class="quiet">Aucun dossier</div>'}</section>`;
+  }).join('');
 }
 
 // ===== RAV REPORT =====
@@ -144,7 +235,7 @@ function changeMonth(dir) {
 
 function currentMonthJobs() {
   const monthKey = `${ravYear}-${String(ravMonth+1).padStart(2,'0')}`;
-  return jobs.filter(j => j.date && j.date.slice(0,7) === monthKey);
+  return jobs.filter(j => j.status !== 'A postuler' && j.date && j.date.slice(0,7) === monthKey);
 }
 
 function renderRAV() {
@@ -190,7 +281,7 @@ function renderRAV() {
           <div class="rav-card-role">${esc(j.role) || '—'}</div>
           <div class="rav-card-co">${esc(j.co) || '—'}</div>
         </div>
-        <button class="btn btn-sm" onclick="openModal('${j.id}')">✏ Compléter</button>
+        <button class="btn btn-sm" onclick="openModal(${jsArg(j.id)})">✏ Compléter</button>
       </div>
       <div class="rav-fields">
         ${v(fmtDate(j.date), 'Quand avez-vous postulé ?')}
@@ -248,10 +339,12 @@ function openModal(id = null) {
 
   document.getElementById('f-role').value = j.role || '';
   document.getElementById('f-co').value = j.co || '';
-  document.getElementById('f-date').value = j.date || new Date().toISOString().slice(0,10);
+  document.getElementById('f-date').value = j.date || '';
   document.getElementById('f-status').value = j.status || 'A postuler';
   document.getElementById('f-prior').value = j.priorite || '';
   document.getElementById('f-sal').value = j.salaire || '';
+  document.getElementById('f-deadline').value = j.deadline || '';
+  document.getElementById('f-followup').value = j.followup || '';
   document.getElementById('f-link').value = j.link || '';
   document.getElementById('f-folder').value = j.folder || '';
 
@@ -276,6 +369,7 @@ function openModal(id = null) {
   document.getElementById('f-notes').value = j.notes || '';
   document.getElementById('f-docs').value = j.docs || '';
 
+  document.getElementById('extra-details').open = !!id;
   document.getElementById('overlay').style.display = 'flex';
   setTimeout(() => document.getElementById('f-role').focus(), 100);
 }
@@ -294,13 +388,17 @@ function save() {
   const co = document.getElementById('f-co').value.trim();
   const date = document.getElementById('f-date').value;
   if (!role) { alert('Le nom du poste est requis.'); return; }
+  const status = document.getElementById('f-status').value;
+  if (status === 'A postuler' && date && !confirm('Une date d\'envoi est renseignée, mais le statut est « À postuler ». Conserver cette combinaison ? La candidature sera exclue du rapport RAV.')) return;
 
   const j = {
     id: editId || genId(),
     role, co, date,
-    status: document.getElementById('f-status').value,
+    status,
     priorite: document.getElementById('f-prior').value,
     salaire: document.getElementById('f-sal').value.trim(),
+    deadline: document.getElementById('f-deadline').value,
+    followup: document.getElementById('f-followup').value,
     link: document.getElementById('f-link').value.trim(),
     folder: document.getElementById('f-folder').value.trim(),
     rue: document.getElementById('f-rue').value.trim(),
@@ -321,6 +419,7 @@ function save() {
     resultat: document.getElementById('f-resultat').value,
     notes: document.getElementById('f-notes').value.trim(),
     docs: document.getElementById('f-docs').value.trim(),
+    updatedAt: new Date().toISOString(),
   };
 
   if (editId) {
@@ -378,10 +477,10 @@ function importJSON(event) {
 // ===== MERGE (ajoute / met à jour, sans remplacer) =====
 // Clé de déduplication : id stable (préféré), sinon (co + role + date).
 // Réutilisée par l'import fichier, le merge fichier, et la sync GitHub.
-function mergeData(incoming) {
+function mergeData(incoming, preferNewer = false) {
   if (!Array.isArray(incoming)) throw new Error('Format invalide : un tableau JSON est attendu.');
 
-  let added = 0, updated = 0;
+  let added = 0, updated = 0, conflicts = 0;
   const byId = new Map(jobs.map(j => [j.id, j]));
   const sig = j => `${(j.co||'').toLowerCase().trim()}|${(j.role||'').toLowerCase().trim()}|${j.date||''}`;
   const bySig = new Map(jobs.map(j => [sig(j), j]));
@@ -391,6 +490,13 @@ function mergeData(incoming) {
     if (!target) target = bySig.get(sig(inc));
 
     if (target) {
+      if (JSON.stringify(target) === JSON.stringify(inc)) continue;
+      // Pendant une récupération GitHub, une version non datée ne doit jamais
+      // écraser silencieusement un enregistrement local.
+      if (preferNewer && (!inc.updatedAt || (target.updatedAt && inc.updatedAt <= target.updatedAt))) {
+        conflicts++;
+        continue;
+      }
       const keptId = target.id;
       Object.assign(target, inc, { id: keptId });
       updated++;
@@ -402,7 +508,7 @@ function mergeData(incoming) {
       added++;
     }
   }
-  return { added, updated };
+  return { added, updated, conflicts };
 }
 
 function mergeJSON(event) {
@@ -434,14 +540,29 @@ function mergeJSON(event) {
 }
 
 // ===== SYNC GITHUB =====
-// Stocke la config (dont le token) dans une clé localStorage séparée,
-// jamais incluse dans l'export JSON des candidatures.
+// Le token est limité à la session du navigateur. Les anciennes configurations
+// sont migrées hors du stockage persistant à la première ouverture.
+const GH_SESSION_TOKEN = 'jobtracker_gh_session_token';
 function ghLoadConfig() {
-  try { return JSON.parse(localStorage.getItem(GH_CONFIG_KEY) || '{}'); }
+  try {
+    const cfg = JSON.parse(localStorage.getItem(GH_CONFIG_KEY) || '{}');
+    if (cfg.token) {
+      sessionStorage.setItem(GH_SESSION_TOKEN, cfg.token);
+      delete cfg.token;
+      localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(cfg));
+    }
+    return {...cfg, token:sessionStorage.getItem(GH_SESSION_TOKEN) || ''};
+  }
   catch { return {}; }
 }
 function ghSaveConfig(cfg) {
-  localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(cfg));
+  const {token,...publicConfig} = cfg;
+  localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(publicConfig));
+  if(token) sessionStorage.setItem(GH_SESSION_TOKEN,token);
+  else sessionStorage.removeItem(GH_SESSION_TOKEN);
+}
+function ghSyncKey(cfg) {
+  return 'jobtracker_last_remote_sha:' + [cfg.owner,cfg.repo,cfg.branch,cfg.path].join('/');
 }
 
 function ghConfigOpen() {
@@ -514,6 +635,10 @@ async function ghPush() {
   ghSetStatus('Envoi en cours…', '');
   try {
     const current = await ghFetchFile(cfg);
+    const lastSeen = localStorage.getItem(ghSyncKey(cfg));
+    if (current.exists && lastSeen !== current.sha) {
+      throw new Error('Le dépôt a changé ou n’a pas encore été récupéré sur cet appareil. Utilisez d’abord « Récupérer », puis vérifiez vos données avant un nouvel envoi.');
+    }
     const body = {
       message: `Sync candidatures — ${new Date().toISOString()}`,
       content: b64EncodeUtf8(JSON.stringify(jobs, null, 2)),
@@ -532,7 +657,8 @@ async function ghPush() {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`GitHub API ${res.status} : ${(await res.json().catch(()=>({})))?.message || res.statusText}`);
-
+    const saved = await res.json();
+    if (saved.content?.sha) localStorage.setItem(ghSyncKey(cfg),saved.content.sha);
     ghSetStatus(`✓ Envoyé (${jobs.length} candidatures) — ${new Date().toLocaleTimeString('fr-CH')}`, 'ok');
   } catch (err) {
     ghSetStatus('✗ Échec envoi : ' + err.message, 'err');
@@ -548,15 +674,16 @@ async function ghPull() {
     const remote = await ghFetchFile(cfg);
     if (!remote.exists) { ghSetStatus('Aucun fichier distant trouvé — faites d\'abord un envoi.', 'err'); return; }
 
-    const { added, updated } = mergeData(remote.content);
-    if (!confirm(`Fusionner les données distantes ?\n  • ${added} ajout(s)\n  • ${updated} mise(s) à jour\nVos candidatures locales sont préservées.`)) {
+    const { added, updated, conflicts } = mergeData(remote.content, true);
+    if (!confirm(`Fusionner les données distantes ?\n  • ${added} ajout(s)\n  • ${updated} mise(s) à jour\n  • ${conflicts} différence(s) conservée(s) localement (version ambiguë ou plus ancienne)\nVérifiez vos candidatures avant un envoi.`)) {
       load();
       ghSetStatus('Récupération annulée.', '');
       return;
     }
     persist();
+    localStorage.setItem(ghSyncKey(cfg),remote.sha);
     render(); renderRAV(); renderStats();
-    ghSetStatus(`✓ Reçu : ${added} ajoutée(s), ${updated} mise(s) à jour — ${new Date().toLocaleTimeString('fr-CH')}`, 'ok');
+    ghSetStatus(`✓ Reçu : ${added} ajoutée(s), ${updated} mise(s) à jour, ${conflicts} différence(s) conservée(s) — ${new Date().toLocaleTimeString('fr-CH')}`, conflicts ? 'err' : 'ok');
   } catch (err) {
     ghSetStatus('✗ Échec récupération : ' + err.message, 'err');
   }
@@ -564,3 +691,6 @@ async function ghPull() {
 
 // ===== INIT =====
 load();
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Mode hors ligne indisponible :',err));
+}

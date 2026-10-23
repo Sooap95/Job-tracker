@@ -3,37 +3,61 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Suivi Candidatures — RAV</title>
+<meta name="theme-color" content="#12313a">
+<meta name="description" content="Suivi de candidatures privé et rapports RAV pour la Suisse.">
+<title>Job Tracker 2.0 | Mes candidatures</title>
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <div class="app">
-  <!-- Topbar -->
-  <div class="topbar">
-    <div class="topbar-logo">Candidatures <span>/ Suivi RAV</span></div>
+  <!-- Navigation latérale sur ordinateur, en-tête sur mobile -->
+  <header class="topbar">
+    <div class="topbar-logo"><span class="logo-mark" aria-hidden="true">J</span><span class="brand-text">Job Tracker <small>Mon espace candidatures</small></span></div>
+    <button class="mobile-menu" type="button" onclick="toggleMobileSettings()" aria-controls="mobile-settings-panel" aria-expanded="false" aria-label="Ouvrir les sauvegardes et paramètres">☰</button>
     <div class="nav-tabs">
-      <button class="nav-tab active" onclick="switchTab('dashboard')">Tableau de bord</button>
-      <button class="nav-tab" onclick="switchTab('rav')">Rapport RAV</button>
-      <button class="nav-tab" onclick="switchTab('dossier')">Dossier local</button>
+      <button class="nav-tab active" data-tab="dashboard" onclick="switchTab('dashboard')"><span aria-hidden="true">▦</span> Vue d'ensemble</button>
+      <button class="nav-tab" data-tab="rav" onclick="switchTab('rav')"><span aria-hidden="true">▤</span> Rapport RAV</button>
+      <button class="nav-tab" data-tab="dossier" onclick="switchTab('dossier')"><span aria-hidden="true">▧</span> Documents et sauvegardes</button>
     </div>
-    <div class="topbar-actions">
-      <button class="btn btn-sm" onclick="exportJSON()" title="Sauvegarder une copie JSON">⬇ Export</button>
-      <label class="btn btn-sm" title="Charger une sauvegarde JSON (REMPLACE tout)" style="cursor:pointer">⬆ Import<input type="file" accept=".json" onchange="importJSON(event)" style="display:none"></label>
-      <label class="btn btn-sm" title="Fusionner un fichier JSON (ajoute / met à jour, sans remplacer)" style="cursor:pointer">⇄ Fusionner<input type="file" accept=".json" onchange="mergeJSON(event)" style="display:none"></label>
-      <span style="width:1px;height:20px;background:var(--border);display:inline-block;margin:0 2px"></span>
-      <button class="btn btn-sm" onclick="ghPull()" title="Récupérer les données depuis le dépôt GitHub privé">☁ ↓</button>
-      <button class="btn btn-sm" onclick="ghPush()" title="Envoyer les données vers le dépôt GitHub privé">☁ ↑</button>
-      <button class="btn btn-sm btn-icon" onclick="ghConfigOpen()" title="Configurer la synchronisation GitHub">⚙</button>
-      <span class="sync-status" id="gh-status"></span>
+    <div class="nav-caption">DONNÉES ET SYNCHRONISATION</div>
+    <div class="topbar-actions" id="mobile-settings-panel">
+      <button class="side-action" onclick="exportJSON()">↓ Sauvegarder en JSON</button>
+      <label class="side-action file-action">↑ Restaurer une sauvegarde<input type="file" accept=".json" onchange="importJSON(event)" hidden></label>
+      <label class="side-action file-action">⇄ Fusionner une sauvegarde<input type="file" accept=".json" onchange="mergeJSON(event)" hidden></label>
+      <div class="sync-actions">
+        <button class="side-action" onclick="ghPull()" title="Fusionner les données du dépôt privé">☁ Récupérer</button>
+        <button class="side-action" onclick="ghPush()" title="Envoyer vers le dépôt privé">☁ Envoyer</button>
+      </div>
+      <button class="side-action" onclick="ghConfigOpen()">⚙ Configurer GitHub</button>
+      <span class="sync-status" id="gh-status" role="status" aria-live="polite">Données locales sur cet appareil</span>
     </div>
-  </div>
+    <div class="nav-privacy">🔒 Vos données restent dans ce navigateur, sauf synchronisation volontaire.</div>
+  </header>
 
-  <div class="main">
+  <main class="main">
     <!-- ===== DASHBOARD ===== -->
     <div id="tab-dashboard">
+      <div class="page-heading">
+        <div><div class="eyebrow" id="today-label">MON ESPACE</div><h1>Ma recherche d'emploi</h1><p>Les prochaines étapes, les candidatures et les démarches RAV au même endroit.</p></div>
+        <button class="btn btn-primary" onclick="openModal()">+ Nouvelle candidature</button>
+      </div>
       <div class="stats-row" id="stats-row"></div>
+      <div class="overview-panels">
+        <section class="overview-panel"><div class="panel-heading"><h2>À suivre en priorité</h2><span>Mes prochaines actions</span></div><div id="next-actions"></div></section>
+        <section class="overview-panel rav-overview"><div class="panel-heading"><h2>Mon rapport RAV</h2><span id="overview-month"></span></div><div id="rav-overview-content"></div></section>
+      </div>
+      <div class="section-heading">
+        <div><h2>Mes candidatures</h2><p>Retrouvez vos offres et suivez leur progression.</p></div>
+        <div class="view-switch" aria-label="Choisir une vue">
+          <button id="view-list" class="active" onclick="switchView('list')" aria-pressed="true">☷ Liste</button>
+          <button id="view-board" onclick="switchView('board')" aria-pressed="false">▦ Tableau</button>
+        </div>
+      </div>
       <div class="toolbar">
-        <input type="text" id="search" placeholder="Rechercher..." oninput="render()" style="min-width:180px">
+        <input type="search" id="search" aria-label="Rechercher une candidature" placeholder="⌕  Rechercher une entreprise, un poste..." oninput="render()">
         <select id="fStatus" onchange="render()">
           <option value="">Tous statuts</option>
           <option>A postuler</option><option>En cours</option>
@@ -49,10 +73,8 @@
           <option value="entreprise">Entreprise A→Z</option>
           <option value="priorite">Priorité</option>
         </select>
-        <div class="toolbar-sep"></div>
-        <button class="btn btn-primary" onclick="openModal()">+ Nouvelle candidature</button>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="list-view">
         <table>
           <thead>
             <tr>
@@ -71,6 +93,8 @@
           <tbody id="tbody"></tbody>
         </table>
       </div>
+      <div class="mobile-cards" id="mobile-cards"></div>
+      <div class="kanban-board" id="kanban-view" hidden></div>
     </div>
 
     <!-- ===== RAV REPORT ===== -->
@@ -136,7 +160,13 @@
         </div>
       </div>
     </div>
-  </div>
+  </main>
+  <nav class="bottom-nav" aria-label="Navigation mobile">
+    <button class="bottom-link active" data-tab="dashboard" onclick="switchTab('dashboard')"><span>⌂</span>Accueil</button>
+    <button class="bottom-link" data-tab="rav" onclick="switchTab('rav')"><span>▤</span>RAV</button>
+    <button class="bottom-add" onclick="openModal()" aria-label="Ajouter une candidature">+</button>
+    <button class="bottom-link" data-tab="dossier" onclick="switchTab('dossier')"><span>▧</span>Données</button>
+  </nav>
 </div>
 
 <!-- ===== MODAL FORMULAIRE ===== -->
@@ -149,6 +179,7 @@
     <div class="modal-body">
 
       <!-- SECTION 1: Infos générales -->
+      <p class="form-intro">Commencez par l'essentiel. Vous pourrez compléter le dossier RAV et les notes à tout moment.</p>
       <div class="section-label">Informations générales</div>
       <div class="form-grid">
         <div class="fg form-full">
@@ -160,8 +191,9 @@
           <input type="text" id="f-co" placeholder="ex. Nom de l'entreprise">
         </div>
         <div class="fg">
-          <label>Date de candidature *</label>
+          <label>Date d'envoi de la candidature</label>
           <input type="date" id="f-date">
+          <small>Laissez vide pour une offre à laquelle vous n'avez pas encore postulé.</small>
         </div>
         <div class="fg">
           <label>Statut</label>
@@ -181,6 +213,14 @@
           <label>Salaire / Fourchette</label>
           <input type="text" id="f-sal" placeholder="ex. CHF 90,000 / an">
         </div>
+        <div class="fg">
+          <label>Date limite pour postuler</label>
+          <input type="date" id="f-deadline">
+        </div>
+        <div class="fg">
+          <label>Prochaine relance ou action</label>
+          <input type="date" id="f-followup">
+        </div>
         <div class="fg form-full">
           <label>Lien vers l'annonce</label>
           <input type="url" id="f-link" placeholder="https://...">
@@ -191,6 +231,8 @@
         </div>
       </div>
 
+      <details class="form-extra" id="extra-details">
+      <summary>Compléter le dossier RAV, les notes et les documents <span>Afficher les champs complémentaires</span></summary>
       <!-- SECTION 2: Coordonnées entreprise (RAV) -->
       <div class="section-label">Coordonnées entreprise — RAV</div>
       <div class="form-grid">
@@ -284,6 +326,7 @@
           <input type="text" id="f-docs" placeholder="ex. CV_NomPrenom_Entreprise.pdf, LM_Entreprise.pdf">
         </div>
       </div>
+      </details>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Annuler</button>
@@ -323,7 +366,7 @@
         </div>
       </div>
       <div class="token-warning">
-        ⚠️ Ce token est stocké en clair dans le localStorage de ce navigateur, sur cet appareil. Ne l'utilisez que sur un ordinateur de confiance, créez-le avec accès limité à ce seul dépôt, et révoquez-le sur GitHub si vous n'en avez plus besoin.
+        ⚠️ Le token reste accessible au JavaScript pendant cette session et disparaît à la fermeture de l'onglet ou de la session du navigateur. Cette synchronisation manuelle demeure provisoire et n'est pas l'authentification sécurisée prévue pour la V3. Utilisez un appareil de confiance et un token limité à ce dépôt privé.
       </div>
     </div>
     <div class="modal-footer">
