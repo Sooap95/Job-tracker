@@ -68,7 +68,18 @@ async function callback(req,env) {
       code:url.searchParams.get('code'),redirect_uri:callbackUrl,code_verifier:flow.verifier})
   });
   const token=await response.json().catch(()=>({}));
-  if (!response.ok || !token.access_token) return json({error:'Connexion GitHub refusée.'},401,{'Set-Cookie':cleared});
+  if (!response.ok || !token.access_token) {
+    // Ne jamais renvoyer de token, code OAuth ou valeur de secret au navigateur.
+    const knownErrors={
+      incorrect_client_credentials:'Client ID ou Client Secret GitHub incorrect.',
+      redirect_uri_mismatch:'URL de retour OAuth différente de celle enregistrée dans GitHub.',
+      bad_verification_code:'Code de connexion expiré ou déjà utilisé. Recommencez la connexion.',
+      unverified_user_email:'Adresse e-mail du compte GitHub non vérifiée.',
+      invalid_grant:'Autorisation OAuth expirée ou invalide.'
+    };
+    const detail=knownErrors[token.error] || 'Échange du code OAuth impossible.';
+    return json({error:'Connexion GitHub refusée : '+detail},401,{'Set-Cookie':cleared});
+  }
   const userRes=await fetch('https://api.github.com/user',{
     headers:{Authorization:`Bearer ${token.access_token}`,Accept:'application/vnd.github+json','User-Agent':'JobTrackerPrivate'}
   });
