@@ -15,6 +15,8 @@ const PRIO_CLASS = {
   'Backup':'b-backup','Offre intéressante':'b-interessant','Job de rêve':'b-reve'
 };
 const PRIO_ORDER = {'Job de rêve':0,'Offre intéressante':1,'Backup':2,'':3};
+const isSubmittedStatus = status => /^Soumis(?:e)?(?:\s|\(|$)/i.test(status || '');
+const statusClass = status => STATUS_CLASS[status] || (isSubmittedStatus(status) ? 'b-cours' : '');
 
 // ===== SECURITY HELPERS =====
 function esc(s) {
@@ -109,7 +111,7 @@ function render() {
     (j.co||'').toLowerCase().includes(search) ||
     (j.notes||'').toLowerCase().includes(search)
   );
-  if (fs) data = data.filter(j => j.status === fs);
+  if (fs) data = data.filter(j => fs === 'Soumis' ? isSubmittedStatus(j.status) : j.status === fs);
   if (fp) data = data.filter(j => j.priorite === fp);
 
   if (so === 'date_desc') data.sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -135,7 +137,7 @@ function render() {
       <td class="td-role" title="${esc(j.role)}">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--border2);" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='inherit'">${esc(j.role)||'—'}</a>` : (esc(j.role)||'—')}</td>
       <td class="td-co" title="${esc(j.co)}">${esc(j.co)||'—'}</td>
       <td style="white-space:nowrap;color:var(--text2)">${fmtDate(j.date)}</td>
-      <td><span class="badge ${STATUS_CLASS[j.status]||''}">${esc(j.status)||'—'}</span></td>
+      <td><span class="badge ${statusClass(j.status)}">${esc(j.status)||'—'}</span></td>
       <td>${j.priorite ? `<span class="badge ${PRIO_CLASS[j.priorite]||''}">${esc(j.priorite)}</span>` : '—'}</td>
       <td style="color:var(--text2);white-space:nowrap">${esc(j.salaire)||'—'}</td>
       <td><span class="badge ${rc ? 'b-rav-ok' : 'b-rav-no'}">${rc ? '✓ OK' : '⚠ Incomplet'}</span></td>
@@ -161,13 +163,14 @@ function renderStats() {
   const total = jobs.length;
   const counts = {'A postuler':0,'En cours':0,'Attente de retour':0,'Refusé':0,'Accepté':0};
   jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
+  const submittedCount = jobs.filter(j => isSubmittedStatus(j.status)).length;
   const thisMonth = localDateKey().slice(0,7);
   const thisMonthJobs = jobs.filter(j => j.status !== 'A postuler' && j.date?.slice(0,7) === thisMonth);
   const followups = jobs.filter(j => j.followup && j.followup <= localDateKey() && !['Refusé','Accepté'].includes(j.status)).length;
 
   document.getElementById('stats-row').innerHTML = `
     <div class="stat-card"><div class="stat-n">${total}</div><div class="stat-l">Candidatures suivies</div></div>
-    <div class="stat-card blue"><div class="stat-n">${counts['En cours'] + counts['Attente de retour']}</div><div class="stat-l">Dossiers actifs</div></div>
+    <div class="stat-card blue"><div class="stat-n">${counts['En cours'] + counts['Attente de retour'] + submittedCount}</div><div class="stat-l">Dossiers actifs</div></div>
     <div class="stat-card amber"><div class="stat-n">${followups}</div><div class="stat-l">Relances à traiter</div></div>
     <div class="stat-card green"><div class="stat-n">${thisMonthJobs.length}</div><div class="stat-l">Démarches ce mois</div></div>
   `;
@@ -209,7 +212,7 @@ function renderMobileCards(data) {
     <article class="mobile-card">
       <div class="action-company" aria-hidden="true">${esc((j.co||'?').slice(0,1).toUpperCase())}</div>
       <div class="mobile-card-copy"><strong>${esc(j.role)}</strong><span class="co">${esc(j.co)}${j.date?' · '+esc(niceDate(j.date)):''}</span>
-        <div class="badges"><span class="badge ${STATUS_CLASS[j.status]||''}">${esc(j.status||'Non défini')}</span>
+        <div class="badges"><span class="badge ${statusClass(j.status)}">${esc(j.status||'Non défini')}</span>
         ${j.priorite?'<span class="badge '+(PRIO_CLASS[j.priorite]||'')+'">'+esc(j.priorite)+'</span>':''}
         ${j.followup?'<span class="badge b-rav-ok">Action '+esc(niceDate(j.followup))+'</span>':''}</div>
       </div>
@@ -218,11 +221,11 @@ function renderMobileCards(data) {
 }
 function renderBoard(data) {
   const groups = [
-    ['A postuler','À postuler'],['En cours','En cours'],
+    ['A postuler','À postuler'],['En cours','En cours'],['Soumis','Soumis'],
     ['Attente de retour','En attente'],['Accepté','Accepté'],['Refusé','Refusé']
   ];
   document.getElementById('kanban-view').innerHTML = groups.map(([status,label]) => {
-    const col = data.filter(j => j.status === status);
+    const col = data.filter(j => status === 'Soumis' ? isSubmittedStatus(j.status) : j.status === status);
     return `<section class="kanban-column"><div class="kanban-title">${esc(label)} <span class="kanban-count">${col.length}</span></div>
       ${col.length ? col.map(j => `<div class="kanban-card" role="button" tabindex="0" onclick="openModal(${jsArg(j.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openModal(${jsArg(j.id)})}">
         <strong>${esc(j.role)}</strong><small>${esc(j.co)}</small>
@@ -338,6 +341,12 @@ function exportRAVCSV() {
 }
 
 // ===== MODAL =====
+function selectRadioValue(name,value) {
+  // Une valeur historique inconnue ne doit ni bloquer la modale ni être remplacée.
+  document.querySelectorAll(`input[name="${name}"]`).forEach(input => {
+    input.checked = input.value === value;
+  });
+}
 function openModal(id = null) {
   editId = id;
   document.getElementById('modal-title').textContent = id ? 'Modifier la candidature' : 'Nouvelle candidature';
@@ -368,8 +377,8 @@ function openModal(id = null) {
   document.getElementById('f-m-contact').checked = !!j.m_contact;
   document.getElementById('f-m-tel').checked = !!j.m_tel;
   document.getElementById('f-form-link').value = j.form_link || '';
-  document.querySelector(`input[name=orp][value="${j.orp || 'Non'}"]`).checked = true;
-  document.querySelector(`input[name=taux][value="${j.taux || 'A plein temps'}"]`).checked = true;
+  selectRadioValue('orp',j.orp || 'Non');
+  selectRadioValue('taux',j.taux || 'A plein temps');
   document.getElementById('f-resultat').value = j.resultat || '';
 
   document.getElementById('f-notes').value = j.notes || '';
@@ -394,7 +403,8 @@ function save() {
   const co = document.getElementById('f-co').value.trim();
   const date = document.getElementById('f-date').value;
   if (!role) { alert('Le nom du poste est requis.'); return; }
-  const status = document.getElementById('f-status').value;
+  const original = editId ? jobs.find(j => j.id === editId) : null;
+  const status = document.getElementById('f-status').value || original?.status || 'A postuler';
   if (status === 'A postuler' && date && !confirm('Une date d\'envoi est renseignée, mais le statut est « À postuler ». Conserver cette combinaison ? La candidature sera exclue du rapport RAV.')) return;
 
   const j = {
@@ -420,8 +430,8 @@ function save() {
     m_contact: document.getElementById('f-m-contact').checked,
     m_tel: document.getElementById('f-m-tel').checked,
     form_link: document.getElementById('f-form-link').value.trim(),
-    orp: document.querySelector('input[name=orp]:checked')?.value || 'Non',
-    taux: document.querySelector('input[name=taux]:checked')?.value || 'A plein temps',
+    orp: document.querySelector('input[name=orp]:checked')?.value || original?.orp || 'Non',
+    taux: document.querySelector('input[name=taux]:checked')?.value || original?.taux || 'A plein temps',
     resultat: document.getElementById('f-resultat').value,
     notes: document.getElementById('f-notes').value.trim(),
     docs: document.getElementById('f-docs').value.trim(),
