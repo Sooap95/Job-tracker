@@ -122,3 +122,19 @@ test('form exposes legacy submitted statuses and 80-100 percent occupation', () 
   assert.match(html,/value="Soumis \(RAV quota octobre\)"/);
   assert.match(html,/name="taux"[^>]+value="80-100%"/);
 });
+
+test('desktop list uses a fitted table with responsive secondary columns', () => {
+  const html = fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+  const css = fs.readFileSync(path.join(__dirname,'style.css'),'utf8');
+  assert.match(html,/<table class="jobs-table">/);
+  assert.doesNotMatch(html,/<th style="width:/);
+  assert.match(css,/\.jobs-table \{ width:100%; min-width:0; table-layout:fixed; \}/);
+  assert.match(css,/@media \(max-width:1700px\)/);
+  assert.match(css,/@media \(max-width:1200px\)/);
+  assert.match(css,/@media \(max-width:980px\)/);
+  const app = createApp([{id:'one',role:'Senior Scientist',co:'Example',status:'Soumis (RAV quota octobre)',notes:'Interview notes'}]);
+  const row = app.elements.get('tbody').innerHTML;
+  assert.match(row,/title="Soumis \(RAV quota octobre\)"/);
+  assert.match(row,/row-actions/);
+  assert.match(row,/Consulter ou modifier/);
+});
