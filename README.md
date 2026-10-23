@@ -37,6 +37,8 @@ La GitHub OAuth App valide l'identité. Elle **n'accède pas aux candidatures**.
 
 ### 2. Configurer Cloudflare Workers
 
+**Déploiement depuis GitHub (Workers Builds) :** sélectionner le dépôt de code `Sooap95/Job-tracker`. Tant que la PR #2 reste ouverte, choisir `feature/v2-responsive-dashboard` comme branche de production, car `main` ne contient pas encore `package.json`. Conserver la racine `/`, la commande de build `npm run build` et la commande de déploiement `npx wrangler deploy`. Si un ancien build échoue avec `ENOENT package.json`, vérifier la branche et le commit effectivement clonés avant de le relancer. Après fusion de la PR, reconfigurer la branche de production sur `main`.
+
 Installer les dépendances de développement avec `npm install`. Créer le Worker avec `npx wrangler deploy` uniquement après avoir configuré les éléments ci-dessous.
 
 Le fichier `wrangler.jsonc` configure l'interface statique sous `dist/`, le backend sous `worker/index.js`, la branche `main` et le chemin `data/jobs-v2.json`. Le déploiement utilise `npm run deploy` (exécute la construction statique puis publie). Il peut être nécessaire d'effectuer un premier déploiement pour obtenir son URL avant de créer le callback GitHub, puis de redéployer avec les secrets.
