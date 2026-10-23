@@ -81,6 +81,30 @@ test('callback rejects mismatched state before exchanging tokens',async()=>{
   } finally {globalThis.fetch=originalFetch;}
 });
 
+test('callback distinguishes missing temporary cookie from other errors',async()=>{
+  const response=await worker.fetch(new Request(origin+'/auth/github/callback?state=fake&code=fake'),env);
+  assert.equal(response.status,400);
+  const body=await response.json();
+  assert.match(body.error,/Cookie temporaire.*absent/);
+  assert.equal(body.error.includes('fake'),false);
+});
+
+test('callback displays GitHub authorization errors without exposing request parameters',async()=>{
+  const start=await worker.fetch(new Request(origin+'/auth/github/start'),env);
+  const cookieValue=start.headers.get('Set-Cookie').split(';')[0];
+  const state=new URL(start.headers.get('Location')).searchParams.get('state');
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=()=>{throw new Error('Should never exchange a code after an OAuth error');};
+  try {
+    const response=await worker.fetch(new Request(origin+'/auth/github/callback?state='+state+
+      '&error=redirect_uri_mismatch&error_description=private-value',{headers:{Cookie:cookieValue}}),env);
+    assert.equal(response.status,400);
+    const body=await response.json();
+    assert.match(body.error,/URL de retour GitHub incorrecte/);
+    assert.equal(JSON.stringify(body).includes('private-value'),false);
+  } finally {globalThis.fetch=originalFetch;}
+});
+
 test('callback refuses another GitHub identity',async()=>{
   const start=await worker.fetch(new Request(origin+'/auth/github/start'),env);
   const cookieValue=start.headers.get('Set-Cookie').split(';')[0];
